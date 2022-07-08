@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.8;
 
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "./PriceConverter.sol";
 contract FundMe {
 
+    // Pour aucune raison que je comprends, il veut absolument utiliser msg.value.getConversionRate()
+    // Doit donc déclarer la ligne ci-dessous pour pouvoir appeler des fonctions de PriceConverter
+    // Directement sur un uint256
+    using PriceConverter for uint256;
     uint256 public minmumUsd = 50 * 1e18;
+
+    address[] public funders;
+    mapping(address => uint256) public addressToAmountFunded;
 
     //keyword "payable" permet de hold funds
     function fund() public payable{
@@ -12,45 +19,22 @@ contract FundMe {
         //apres la virgule est "REVERT" si la condition pas respectée
         //revert : undo ce qui a été fait avant et renvoie le restant du gas
         //mais gas a été waste pour les computations, donc mettre require en début de fonction si possible pour sauver du gas
-        require (msg.value >= minmumUsd, "Didn't send enough"); //1e18 == 1 * 10 ** 18 == 1 eth en wei 
+        // Ancienne méthode : require (getConversionRate(msg.value) >= minmumUsd, "Didn't send enough"); //1e18 == 1 * 10 ** 18 == 1 eth en wei 
+        // Nouvelle avec lib :
+        //require (msg.value.getConversionRate() >= minmumUsd, "Didn't send enough");
+        require (msg.value.getConversionRate() >= 1, "Didn't send enough");
+        // Multiple param
+        msg.value.testMultipleParam(123);
 
+        funders.push(msg.sender); //mot clé global caller de la fonction
+        addressToAmountFunded[msg.sender] = msg.value;
         //on veut demander personne de donner au moins 50$, mais connait pas la valeur de eth sur le réseau
         //on fait donc appel à un oracle (insert monastry music here *ahhhhh*) 
     }
 
     //function withdraw(){}
 
-    function getPrice() public view returns (uint256){
-        //Veut parler à l'oracle (géré par chainlink) pour avoir le prix
-        // Pour parler à un autre contrat : ABI et adresse
-
-        //Exemple de contrat qui utilise Data feed
-        // https://docs.chain.link/docs/get-the-latest-price/
-
-
-        // ABI : Interface qui te dit les fonctions qui sont implémentées par le contrat
-        // Adresse : https://docs.chain.link/docs/ethereum-addresses/
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(0x8A753747A1Fa494EC906cE90E9f37563A8AF630e);
-
-        //fonction retourne tout ces champs
-        //https://github.com/smartcontractkit/chainlink/blob/develop/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol
-        //(uint80 roundID, int price, uint startedAt, uint timeStamp, uint80 answerInRound) = priceFeed.latestRoundData();
-
-        //Comme on s'en caliss sauf answer, on va juste cherche celui-là
-        (,int256 price,,,) = priceFeed.latestRoundData();
-        //price = eth en USD
-        //mais il manque le point pour séparer décimal
-        return uint256(price * 1e10); // 1**10 
-        //autre problème : msg.value and un uint256 alors que notre price est int256, on va donc caster
-    }
-    function getConversionRate(uint256 ethAmount) public view returns (uint256){
-        uint256 ethPrice = getPrice();
-        //3000_000000000000000000 (18 zéros) ETH price in USD
-        //1_000000000000000000 ETH
-        //Doit tjs multiplier AVANT de diviser en solidity
-        uint256 ethAmountInUsd = (ethPrice * ethAmount) / 1e18;
-        return ethAmountInUsd;
-    }
+    //voir price converter
 }
 
 //Dans un envoi etherscan
